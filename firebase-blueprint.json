@@ -1,0 +1,281 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "emailLower": { "type": "string" },
+        "normalizedEmail": { "type": "string" },
+        "username": { "type": "string" },
+        "normalizedUsername": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "partnerId": { "type": "string" },
+        "relationshipStatus": { "type": "string", "enum": ["single", "pending", "partnered"] },
+        "provider": { "type": "string" },
+        "onboardingCompleted": { "type": "boolean" },
+        "cpCompleted": { "type": "boolean" },
+        "bio": { "type": "string" },
+        "coverURL": { "type": "string" },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "dateType": { "type": "string" },
+            "budgetRange": { "type": "string" },
+            "quietVsLively": { "type": "string" },
+            "indoorVsOutdoor": { "type": "string" },
+            "conversationVsActivity": { "type": "string" },
+            "safeVsAdventurous": { "type": "string" },
+            "dietaryRestrictions": { "type": "array", "items": { "type": "string" } },
+            "allergies": { "type": "array", "items": { "type": "string" } },
+            "fears": { "type": "array", "items": { "type": "string" } },
+            "discomforts": { "type": "array", "items": { "type": "string" } },
+            "purpose": { "type": "string" },
+            "energyLevel": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Plan": {
+      "title": "Plan",
+      "description": "A date plan item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "placeId": { "type": "string" },
+        "placeName": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "endTime": { "type": "string" },
+        "notes": { "type": "string" },
+        "addedBy": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "shared", "confirmed", "completed"] },
+        "title": { "type": "string" },
+        "duration": { "type": "string" },
+        "budget": { "type": "string" },
+        "area": { "type": "string" },
+        "travelStyle": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "whyThisFits": { "type": "string" },
+        "timeline": { "type": "array", "items": { "type": "object" } },
+        "feedback": {
+          "type": "object",
+          "properties": {
+            "rating": { "type": "number" },
+            "vibeMatch": { "type": "boolean" },
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "comments": { "type": "string" },
+            "completedAt": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["id", "placeId", "placeName", "addedBy", "status"]
+    },
+    "RelationshipRequest": {
+      "title": "RelationshipRequest",
+      "description": "A request to connect two users",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "receiverEmail": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "removed"] },
+        "acceptedAt": { "type": "object" },
+        "rejectedAt": { "type": "object" },
+        "removedAt": { "type": "object" },
+        "removedBy": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["senderId", "receiverId", "status"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "A shared space for a couple",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderPhotoURL": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "serverTimestamp": { "type": "object" },
+        "sticker": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "sharedContent": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["post", "place", "suggested_post"] },
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "image": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["senderId"]
+    },
+    "CommunityPost": {
+      "title": "CommunityPost",
+      "description": "A public post shared by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "locationName": { "type": "string" },
+        "caption": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "imageUrls": { "type": "array", "items": { "type": "string" } },
+        "rating": { "type": "number" },
+        "timestamp": { "type": "object" },
+        "createdAtMs": { "type": "number" },
+        "comments": { "type": "array", "items": { "$ref": "#/entities/Comment" } },
+        "reactions": { "type": "array", "items": { "$ref": "#/entities/Reaction" } },
+        "savedBy": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["already_went", "want_to_try"] },
+        "dateType": { "type": "string", "enum": ["first_date", "chill", "anniversary", "casual_hangout"] },
+        "priceLevel": { "type": "string", "enum": ["$", "$$", "$$$"] },
+        "vibeTags": { "type": "array", "items": { "type": "string" } },
+        "mbti": { "type": "string" },
+        "relationshipStage": { "type": "string" },
+        "linkedSpotId": { "type": "string" },
+        "linkedPlaceId": { "type": "string" },
+        "vibe": { "type": "string" },
+        "noiseLevel": { "type": "string" },
+        "budgetAccuracy": { "type": "string" },
+        "crowdLevel": { "type": "string" },
+        "conversationFriendly": { "type": "string" },
+        "watchOuts": { "type": "array", "items": { "type": "string" } },
+        "reviewLinks": { "type": "array", "items": { "type": "object" } },
+        "visibility": { "type": "string", "enum": ["public", "partner", "private"] },
+        "bestForInsight": { 
+          "type": "object",
+          "properties": {
+            "bestTime": { "type": "string" },
+            "seating": { "type": "string" },
+            "noiseLevel": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["userId", "caption"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    },
+    "Reaction": {
+      "title": "Reaction",
+      "description": "A reaction on a post",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" }
+      }
+    },
+    "SharedSpot": {
+      "title": "SharedSpot",
+      "description": "A shared point of interest",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "category": { "type": "string" },
+        "district": { "type": "string" },
+        "city": { "type": "string" },
+        "openingHour": { "type": "string" },
+        "closingHour": { "type": "string" },
+        "priceRange": { "type": "string" },
+        "priceAmount": { "type": "string" },
+        "rating": { "type": "number" },
+        "foodRating": { "type": "number" },
+        "serviceRating": { "type": "number" },
+        "atmosphereRating": { "type": "number" },
+        "review": { "type": "string" },
+        "reviewName": { "type": "string" },
+        "reviewMedia": { "type": "array", "items": { "type": "string" } },
+        "image": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "icon": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["name", "lat", "lng"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and preferences"
+    },
+    "/users/{userId}/personalPlans/{planId}": {
+      "schema": "Plan",
+      "description": "User's personal date plans"
+    },
+    "/relationshipRequests/{requestId}": {
+      "schema": "RelationshipRequest",
+      "description": "Requests between partners"
+    },
+    "/relationshipChats/{chatRoomId}": {
+      "schema": "ChatRoom",
+      "description": "Room for coupled users"
+    },
+    "/relationshipChats/{chatRoomId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages in a room"
+    },
+    "/relationshipChats/{chatRoomId}/plans/{planId}": {
+      "schema": "Plan",
+      "description": "Shared plans between partners"
+    },
+    "/communityPosts/{postId}": {
+      "schema": "CommunityPost",
+      "description": "Public posts from the community"
+    },
+    "/sharedSpots/{spotId}": {
+      "schema": "SharedSpot",
+      "description": "Globally shared spots on the map"
+    }
+  }
+}
+

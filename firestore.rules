@@ -1,0 +1,321 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (request.auth.token.email in ['linhnb465@gmail.com', 'nblinh465@gmail.com', 'linhbao456nguyen@gmail.com']);
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isChatParticipant(roomId) {
+      // Deterministic roomId: userId1-userId2
+      return isSignedIn() && (request.auth.uid in roomId.split('-'));
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidUser(data) {
+      return data.uid is string && 
+             data.email is string &&
+             (data.updatedAt != null);
+    }
+
+    function isValidPlan(data) {
+      return (!('id' in data) || isValidId(data.id)) &&
+             (!('placeId' in data) || (data.placeId is string && data.placeId.size() <= 128)) &&
+             (!('placeName' in data) || (data.placeName is string && data.placeName.size() <= 1024)) &&
+             (!('title' in data) || (data.title is string && data.title.size() <= 1024)) &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 1024)) &&
+             (!('status' in data) || (data.status in ['draft', 'shared', 'confirmed', 'completed', 'accepted', 'declined'])) &&
+             (!('addedBy' in data) || isValidId(data.addedBy)) &&
+             (!('lastUpdatedBy' in data) || isValidId(data.lastUpdatedBy)) &&
+             (!('senderId' in data) || isValidId(data.senderId)) &&
+             (!('receiverId' in data) || isValidId(data.receiverId)) &&
+             (!('participants' in data) || (data.participants is list && data.participants.size() <= 5)) &&
+             (!('date' in data) || (data.date is string && data.date.size() <= 128)) &&
+             (!('time' in data) || (data.time is string && data.time.size() <= 128)) &&
+             (!('endTime' in data) || (data.endTime is string && data.endTime.size() <= 128)) &&
+             (!('updatedAt' in data) || (data.updatedAt == request.time || data.updatedAt is timestamp || data.updatedAt is map || data.updatedAt is number || data.updatedAt == null)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is map || data.createdAt is number || data.createdAt == null)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 10000)) &&
+             (!('whyThisFits' in data) || (data.whyThisFits is string && data.whyThisFits.size() <= 10000)) &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 10000)) &&
+             (!('purpose' in data) || (data.purpose == null || (data.purpose is string && data.purpose.size() <= 5000))) &&
+             (!('watchOut' in data) || (data.watchOut == null || (data.watchOut is string && data.watchOut.size() <= 5000))) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 100)) &&
+             (!('timeline' in data) || data.timeline is list) &&
+             (!('budget' in data) || (data.budget is string && data.budget.size() <= 128)) &&
+             (!('estimatedBudget' in data) || (data.estimatedBudget is string && data.estimatedBudget.size() <= 128)) &&
+             (!('duration' in data) || (data.duration is string && data.duration.size() <= 128)) &&
+             (!('estimatedDuration' in data) || (data.estimatedDuration is string && data.estimatedDuration.size() <= 128)) &&
+             (!('area' in data) || (data.area is string && data.area.size() <= 512)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 512)) &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 512)) &&
+             (!('travelStyle' in data) || (data.travelStyle is string && data.travelStyle.size() <= 512)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
+             (!('socialReviews' in data) || (data.socialReviews is list && data.socialReviews.size() <= 100)) &&
+             (!('backupPlace' in data) || (data.backupPlace == null || data.backupPlace is map)) &&
+             (!('partnerReactions' in data) || (data.partnerReactions == null || data.partnerReactions is map)) &&
+             (!('confirmedAt' in data) || (data.confirmedAt == null || data.confirmedAt is number)) &&
+             (!('acceptedAt' in data) || (data.acceptedAt == null || data.acceptedAt is number)) &&
+             (!('declinedAt' in data) || (data.declinedAt == null || data.declinedAt is number)) &&
+             (!('completedAt' in data) || (data.completedAt == null || data.completedAt is number)) &&
+             (!('feedback' in data) || (data.feedback == null || data.feedback is map)) &&
+             (!('category' in data) || (data.category is string)) &&
+             (!('rating' in data) || (data.rating is number)) &&
+             (!('priceRange' in data) || (data.priceRange is string)) &&
+             (!('vibe' in data) || (data.vibe is string)) &&
+             (!('suggestionData' in data) || (data.suggestionData == null || data.suggestionData is map)) &&
+             (!('_origin' in data) || data._origin is string);
+    }
+
+    function isValidRelationshipRequest(data) {
+      return ((data.get('senderId', '') is string) || (data.get('fromUid', '') is string)) &&
+             ((data.get('receiverId', '') is string) || (data.get('toUid', '') is string)) &&
+             data.status in ['pending', 'accepted', 'rejected', 'removed', 'cancelled', 'superseded', 'archived'] &&
+             (data.updatedAt == request.time || data.updatedAt is timestamp || data.updatedAt is map || data.updatedAt is number) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is map || data.createdAt is number)) &&
+             (!('senderEmail' in data) || (data.senderEmail == null || data.senderEmail is string)) &&
+             (!('senderName' in data) || (data.senderName == null || data.senderName is string)) &&
+             (!('senderUsername' in data) || (data.senderUsername == null || data.senderUsername is string)) &&
+             (!('senderPhotoURL' in data) || (data.senderPhotoURL == null || data.senderPhotoURL is string)) &&
+             (!('receiverEmail' in data) || (data.receiverEmail == null || data.receiverEmail is string)) &&
+             (!('receiverName' in data) || (data.receiverName == null || data.receiverName is string)) &&
+             (!('receiverPhotoURL' in data) || (data.receiverPhotoURL == null || data.receiverPhotoURL is string)) &&
+             (!('anniversaryDate' in data) || (data.anniversaryDate == null || data.anniversaryDate is string)) &&
+             (!('acceptedAt' in data) || (data.acceptedAt == null || data.acceptedAt is timestamp || data.acceptedAt is map || data.acceptedAt is number)) &&
+             (!('rejectedAt' in data) || (data.rejectedAt == null || data.rejectedAt is timestamp || data.rejectedAt is map || data.rejectedAt is number)) &&
+             (!('cancelledAt' in data) || (data.cancelledAt == null || data.cancelledAt is timestamp || data.cancelledAt is map || data.cancelledAt is number)) &&
+             (!('removedAt' in data) || (data.removedAt == null || data.removedAt is timestamp || data.removedAt is map || data.removedAt is number)) &&
+             (!('archivedAt' in data) || (data.archivedAt == null || data.archivedAt is timestamp || data.archivedAt is map || data.archivedAt is number)) &&
+             (!('supersededAt' in data) || (data.supersededAt == null || data.supersededAt is timestamp || data.supersededAt is map || data.supersededAt is number)) &&
+             (!('removedBy' in data) || (data.removedBy == null || data.removedBy is string));
+    }
+
+    function isValidChatRoom(data) {
+      return data.participants is list && data.participants.size() == 2 &&
+             data.participants.hasAny([request.auth.uid]) &&
+             (!('updatedAt' in data) || (data.updatedAt == request.time || data.updatedAt is timestamp || data.updatedAt is map || data.updatedAt is number)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is map || data.createdAt is number)) &&
+             (!('status' in data) || (data.status is string && data.status.size() <= 128)) &&
+             (!('lastMessage' in data) || data.lastMessage is string || data.lastMessage is map);
+    }
+
+    function isMember(participants) {
+      return isSignedIn() && (participants is list) && participants.hasAny([request.auth.uid]);
+    }
+
+    function isValidMessage(data) {
+      return data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() <= 10000 &&
+             (!('updatedAt' in data) || (data.updatedAt == request.time || data.updatedAt is timestamp || data.updatedAt is map || data.updatedAt is number)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is map || data.createdAt is number)) &&
+             (!('senderName' in data) || data.senderName is string) &&
+             (!('senderPhotoURL' in data) || data.senderPhotoURL is string) &&
+             (!('receiverId' in data) || data.receiverId is string) &&
+             (!('timestamp' in data) || data.timestamp is number) &&
+             (!('type' in data) || data.type is string) &&
+             (!('sticker' in data) || (data.sticker is string && data.sticker.size() <= 256)) &&
+             (!('mediaUrl' in data) || (data.mediaUrl is string && data.mediaUrl.size() <= 1000000));
+    }
+
+    function isValidCommunityPost(data) {
+      return data.userId is string &&
+             data.caption is string && data.caption.size() <= 10000 &&
+             (!('updatedAt' in data) || (data.updatedAt == request.time || data.updatedAt is timestamp || data.updatedAt is map || data.updatedAt is number)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is map || data.createdAt is number)) &&
+             (!('createdAtMs' in data) || data.createdAtMs is number) &&
+             (!('timestamp' in data) || (data.timestamp is timestamp || data.timestamp is map || data.timestamp is number)) &&
+             (!('imageUrl' in data) || (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 1000000))) &&
+             (!('imageUrls' in data) || (data.imageUrls is list && data.imageUrls.size() <= 20)) &&
+             (!('rating' in data) || data.rating is number) &&
+             (!('vibeTags' in data) || (data.vibeTags is list && data.vibeTags.size() <= 20)) &&
+             (!('visibility' in data) || (data.visibility in ['public', 'partner', 'private'])) &&
+             (!('locationName' in data) || data.locationName is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('status' in data) || data.status is string) &&
+             (!('dateType' in data) || data.dateType is string) &&
+             (!('priceLevel' in data) || data.priceLevel is string) &&
+             (!('linkedSpotId' in data) || data.linkedSpotId is string) &&
+             (!('reviewTitle' in data) || data.reviewTitle is string);
+    }
+
+    function isValidSharedSpot(data) {
+      return data.name is string && data.name.size() <= 512 &&
+             data.lat is number && data.lng is number &&
+             (!('updatedAt' in data) || (data.updatedAt == request.time || data.updatedAt is timestamp)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp || data.createdAt is number)) &&
+             (!('userId' in data) || (data.userId == request.auth.uid || data.userId == 'anonymous' || isAdmin())) &&
+             (!('rating' in data) || data.rating is number) &&
+             (!('reviews' in data) || data.reviews is list);
+    }
+
+    // --- Collection Routes ---
+
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() || isAdmin();
+      allow list: if isSignedIn() || isAdmin(); 
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming());
+      allow delete: if isAdmin();
+
+      match /personalPlans/{planId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPlan(incoming()) &&
+                      incoming().id == planId &&
+                      incoming().addedBy == request.auth.uid &&
+                      (incoming().createdAt == request.time || incoming().createdAt is timestamp || incoming().createdAt is number || incoming().createdAt is map);
+        allow update: if isOwner(userId) && isValidPlan(incoming()) &&
+                      (incoming().get('id', planId) == planId) &&
+                      (!('id' in existing()) || incoming().id == existing().id) &&
+                      (!('addedBy' in existing()) || incoming().addedBy == existing().addedBy) &&
+                      (!('createdAt' in existing()) || (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time || incoming().createdAt is timestamp || incoming().createdAt is number || incoming().createdAt is map));
+        allow delete: if isOwner(userId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read, list: if isOwner(userId);
+        allow create: if isSignedIn();
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /relationshipRequests/{requestId} {
+      function isSender() { return isSignedIn() && (existing().get('senderId', '') == request.auth.uid || existing().get('fromUid', '') == request.auth.uid); }
+      function isReceiver() { return isSignedIn() && (existing().get('receiverId', '') == request.auth.uid || existing().get('toUid', '') == request.auth.uid); }
+      function isParticipant() { return isSender() || isReceiver(); }
+
+      allow read: if isParticipant();
+      allow list: if isSignedIn() && (resource.data.get('senderId', '') == request.auth.uid || 
+                                     resource.data.get('fromUid', '') == request.auth.uid ||
+                                     resource.data.get('receiverId', '') == request.auth.uid ||
+                                     resource.data.get('toUid', '') == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(requestId) && isValidRelationshipRequest(incoming()) && 
+                    (incoming().get('senderId', '') == request.auth.uid || incoming().get('fromUid', '') == request.auth.uid) &&
+                    (incoming().createdAt == request.time || incoming().createdAt is timestamp || incoming().createdAt is map || incoming().createdAt is number);
+      allow update: if isSignedIn() && isValidId(requestId) && (
+        isAdmin() || 
+        (isValidRelationshipRequest(incoming()) && isParticipant() && (
+          // Action: Receiver accept/reject/superseded (superseded happens if receiver already had another request)
+          (isReceiver() && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt', 'acceptedAt', 'rejectedAt', 'anniversaryDate', 'supersededAt'])) ||
+          // Action: Sender cancel
+          (isSender() && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt', 'cancelledAt', 'anniversaryDate'])) ||
+          // Action: Either mark as removed/archived/superseded
+          (isParticipant() && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt', 'removedAt', 'archivedAt', 'removedBy', 'supersededAt', 'anniversaryDate']))
+        ))
+      );
+      allow delete: if isParticipant();
+    }
+
+    match /relationshipChats/{chatRoomId} {
+      allow get: if isChatParticipant(chatRoomId) || isAdmin();
+      allow list: if isMember(resource.data.participants) || isAdmin();
+      allow create: if (isChatParticipant(chatRoomId) || isAdmin()) && isValidChatRoom(incoming()) &&
+                    (incoming().createdAt == request.time || isAdmin());
+      allow update: if (isChatParticipant(chatRoomId) || isAdmin()) && isValidChatRoom(incoming()) &&
+                    (isAdmin() || (
+                      incoming().participants == existing().participants &&
+                      incoming().diff(existing()).affectedKeys().hasAny(['status', 'lastMessage', 'updatedAt', 'lastMessageSenderId', 'createdAt'])
+                    ));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isChatParticipant(chatRoomId);
+        allow create: if isChatParticipant(chatRoomId) && 
+                      isValidMessage(incoming());
+        allow update: if isChatParticipant(chatRoomId) && 
+                      isOwner(existing().senderId) && 
+                      isValidMessage(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['text', 'updatedAt']);
+        allow delete: if isChatParticipant(chatRoomId) && isOwner(existing().senderId);
+      }
+
+      match /plans/{planId} {
+        allow read: if isChatParticipant(chatRoomId);
+        allow create: if isChatParticipant(chatRoomId) && 
+                      isValidPlan(incoming()) &&
+                      incoming().id == planId &&
+                      incoming().addedBy == request.auth.uid &&
+                      (incoming().createdAt == request.time || incoming().createdAt is timestamp || incoming().createdAt is number || incoming().createdAt is map);
+        allow update: if (isChatParticipant(chatRoomId) || (isSignedIn() && request.auth.uid in resource.data.get('participants', []))) && 
+                      isValidPlan(incoming()) &&
+                      (incoming().get('id', planId) == planId) &&
+                      (!('id' in existing()) || incoming().id == existing().id) &&
+                      (!('addedBy' in existing()) || incoming().addedBy == existing().addedBy) &&
+                      (
+                        // If accepted/confirmed, both can edit everything
+                        (existing().status in ['accepted', 'confirmed', 'completed']) ||
+                        // If not yet accepted, only creator can edit (or partner can change status to accept/decline)
+                        (request.auth.uid == existing().addedBy) ||
+                        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'confirmedAt', 'declinedAt', 'senderId', 'receiverId', 'participants', 'lastUpdatedBy', 'updatedAt']))
+                      );
+        allow delete: if isChatParticipant(chatRoomId);
+      }
+
+      match /activities/{activityId} {
+        allow read: if isChatParticipant(chatRoomId);
+        allow create: if isChatParticipant(chatRoomId);
+      }
+    }
+
+
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(postId) && isValidCommunityPost(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidCommunityPost(incoming()) && (
+                    isAdmin() ||
+                    isOwner(existing().userId) ||
+                    // Action: React, comment, or save
+                    (incoming().userId == existing().userId && 
+                     incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'comments', 'savedBy', 'updatedAt']))
+                    );
+      allow delete: if isAdmin() || isOwner(existing().userId);
+    }
+
+    match /sharedSpots/{spotId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidSharedSpot(incoming());
+      allow update: if isSignedIn() && isValidSharedSpot(incoming()) && (
+                      isAdmin() ||
+                      isOwner(existing().userId) || 
+                      existing().get('userId', 'anonymous') == 'anonymous' ||
+                      // Action: Add review/media
+                      incoming().diff(existing()).affectedKeys().hasOnly(['reviews', 'imageUrls', 'updatedAt'])
+                    );
+      allow delete: if isAdmin() || isOwner(existing().userId) || existing().get('userId', 'anonymous') == 'anonymous';
+    }
+  }
+}

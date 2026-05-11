@@ -1,0 +1,194 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512)) &&
+             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
+             (!('cpCompleted' in data) || data.cpCompleted is bool) &&
+             (!('partnerId' in data) || (data.partnerId == null || (data.partnerId is string && data.partnerId.size() <= 128))) &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['id', 'placeId', 'placeName', 'addedBy', 'status', 'updatedAt']) &&
+             isValidId(data.id) &&
+             data.placeId is string && data.placeId.size() <= 128 &&
+             data.placeName is string && data.placeName.size() <= 256 &&
+             data.addedBy == request.auth.uid &&
+             data.status in ['personal', 'confirmed', 'completed'] &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidRelationshipRequest(data) {
+      return data.keys().hasAll(['status', 'updatedAt']) &&
+             (data.keys().hasAll(['senderId', 'receiverId']) || data.keys().hasAll(['fromUid', 'toUid'])) &&
+             data.status in ['pending', 'accepted', 'rejected', 'removed'] &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidChatRoom(data) {
+      return data.keys().hasAll(['participants', 'updatedAt']) &&
+             data.participants is list && data.participants.size() == 2 &&
+             data.participants[0] is string && data.participants[1] is string &&
+             data.updatedAt == request.time &&
+             (!('createdAt' in data) || data.createdAt == request.time || data.createdAt is timestamp);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'timestamp']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.timestamp is number;
+    }
+
+    function isValidCommunityPost(data) {
+      let required = ['userId', 'caption'];
+      return data.keys().hasAll(required) &&
+             data.userId is string &&
+             data.caption is string && data.caption.size() <= 1000 &&
+             (!('updatedAt' in data) || data.updatedAt == request.time || data.updatedAt is timestamp);
+    }
+
+    function isValidSharedSpot(data) {
+      return data.keys().hasAll(['name', 'lat', 'lng', 'updatedAt']) &&
+             data.name is string && data.name.size() <= 256 &&
+             data.lat is number && data.lng is number &&
+             data.updatedAt == request.time;
+    }
+
+    // --- Collection Routes ---
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && isEmailVerified();
+      allow update: if isOwner(userId) && isValidUser(incoming()) && isEmailVerified();
+
+      match /personalPlans/{planId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPlan(incoming()) && isEmailVerified();
+        allow update: if isOwner(userId) && isValidPlan(incoming()) && isEmailVerified();
+        allow delete: if isOwner(userId) && isEmailVerified();
+      }
+    }
+
+    match /relationshipRequests/{requestId} {
+      function canReadRequest() {
+        let d = existing();
+        return isSignedIn() && (
+          (d.keys().hasAny(['senderId']) && isOwner(d.senderId)) || 
+          (d.keys().hasAny(['receiverId']) && isOwner(d.receiverId)) || 
+          (d.keys().hasAny(['fromUid']) && isOwner(d.fromUid)) || 
+          (d.keys().hasAny(['toUid']) && isOwner(d.toUid))
+        );
+      }
+
+      allow read: if canReadRequest();
+      allow list: if isSignedIn() && (
+        (resource.data.keys().hasAny(['receiverId']) && resource.data.receiverId == request.auth.uid) || 
+        (resource.data.keys().hasAny(['senderId']) && resource.data.senderId == request.auth.uid) ||
+        (resource.data.keys().hasAny(['toUid']) && resource.data.toUid == request.auth.uid) || 
+        (resource.data.keys().hasAny(['fromUid']) && resource.data.fromUid == request.auth.uid)
+      );
+      allow create: if isEmailVerified() && (isOwner(incoming().get('senderId', '')) || isOwner(incoming().get('fromUid', ''))) && isValidRelationshipRequest(incoming());
+      allow update: if isEmailVerified() && (
+        // Receiver accepting or rejecting
+        ((isOwner(existing().get('receiverId', '')) || isOwner(existing().get('toUid', ''))) && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt', 'acceptedAt', 'rejectedAt', 'accepted_at', 'rejected_at'])) ||
+        // Either party removing/disconnecting
+        ((isOwner(existing().get('senderId', '')) || isOwner(existing().get('receiverId', '')) || isOwner(existing().get('fromUid', '')) || isOwner(existing().get('toUid', ''))) && incoming().status == 'removed' && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt', 'removedAt', 'removedBy']))
+      ) && isValidRelationshipRequest(incoming());
+    }
+
+    match /relationshipChats/{chatRoomId} {
+      function isParticipant() {
+        return isSignedIn() && (
+          (chatRoomId.matches('.*' + request.auth.uid + '.*')) || 
+          (existing() != null && request.auth.uid in existing().participants)
+        );
+      }
+
+      allow get: if isSignedIn() && (chatRoomId.matches('.*' + request.auth.uid + '.*'));
+      allow list: if isSignedIn() && resource.data.participants.hasAny([request.auth.uid]);
+      allow create: if isEmailVerified() && (request.auth.uid in incoming().participants) && isValidChatRoom(incoming());
+      allow update: if isEmailVerified() && isParticipant() && (
+        incoming().diff(existing()).affectedKeys().hasAny(['status', 'lastMessage', 'updatedAt'])
+      ) && isValidChatRoom(incoming());
+
+      match /messages/{messageId} {
+        allow read: if isParticipant();
+        allow create: if isEmailVerified() && isParticipant() && isValidMessage(incoming());
+        allow delete: if isEmailVerified() && isParticipant() && isOwner(existing().senderId);
+      }
+
+      match /plans/{planId} {
+        allow read: if isParticipant();
+        allow create: if isEmailVerified() && isParticipant() && isValidPlan(incoming());
+        allow update: if isEmailVerified() && isParticipant() && isValidPlan(incoming());
+        allow delete: if isEmailVerified() && isParticipant();
+      }
+    }
+
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn(); 
+      allow create: if isEmailVerified() && isValidCommunityPost(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isEmailVerified() && 
+                    (
+                      (isOwner(existing().get('userId', '')) && isValidCommunityPost(incoming())) ||
+                      (incoming().get('userId', '') == existing().get('userId', '') && 
+                       incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'comments', 'updatedAt']) &&
+                       isValidCommunityPost(incoming()))
+                    );
+      allow delete: if isEmailVerified() && isOwner(existing().get('userId', ''));
+    }
+
+    match /sharedSpots/{spotId} {
+      allow read: if isSignedIn(); 
+      allow create: if isEmailVerified() && isValidSharedSpot(incoming()); 
+      allow update: if isEmailVerified() && (isOwner(existing().get('userId', '')) || existing().get('userId', 'anonymous') == 'anonymous') && isValidSharedSpot(incoming());
+      allow delete: if isEmailVerified();
+    }
+  }
+}

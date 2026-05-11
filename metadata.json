@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Datevia ",
+  "description": "The ultimate couple-centric platform for intentional date planning, real-time communication, and shared memory keeping. Features AI-powered date analysis, interactive visual mapping, and a private relationship dashboard.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
